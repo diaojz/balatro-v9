@@ -1,3 +1,5 @@
 === game-v9 测试时长日志 · 启动 2026-05-28 01:23:12 ===
 
 01:23:12  START · phase=R1-agent · v9 第 1 轮基础闭环
+01:30:04  END   · phase=R1-agent · v9 R1 完成(耗时 ≈ 6min12s)
+01:30:04  START · phase=R2-agent · v9 第 2 轮视觉升级

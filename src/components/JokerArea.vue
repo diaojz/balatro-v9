@@ -4,7 +4,14 @@
     <div class="joker-slots">
       <template v-for="i in MAX_JOKERS" :key="i">
         <div v-if="ownedJokers[i - 1]" class="joker-card">
-          <div class="joker-art">{{ ownedJokers[i - 1].art }}</div>
+          <div class="joker-art">
+            <template v-if="isImagePath(ownedJokers[i - 1].art)">
+              <img :src="ownedJokers[i - 1].art" :alt="ownedJokers[i - 1].name" class="joker-art-img" />
+            </template>
+            <template v-else>
+              <span class="joker-art-emoji">{{ ownedJokers[i - 1].art }}</span>
+            </template>
+          </div>
           <div class="joker-name">{{ ownedJokers[i - 1].name }}</div>
           <div class="joker-desc">{{ ownedJokers[i - 1].description }}</div>
           <div class="joker-rarity" :style="{ color: rarityColor(ownedJokers[i - 1].rarity) }">
@@ -30,6 +37,11 @@ defineProps({
 
 function rarityColor(rarity) {
   return RARITY_COLOR[rarity] ?? '#fff'
+}
+
+function isImagePath(art) {
+  if (typeof art !== 'string') return true  // import 进来的 module URL
+  return art.startsWith('/') || art.startsWith('data:') || /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(art)
 }
 </script>
 
@@ -79,9 +91,26 @@ function rarityColor(rarity) {
 }
 
 .joker-art {
+  width: 72px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.joker-art-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.joker-art-emoji {
   font-size: 36px;
   line-height: 1;
 }
+
 .joker-name {
   font-family: 'Inter', 'PingFang SC', sans-serif;
   font-size: 12px;

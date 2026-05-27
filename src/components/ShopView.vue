@@ -10,7 +10,14 @@
         class="shop-joker-card"
         :class="{ bought: joker.bought, cantafford: coins < joker.price }"
       >
-        <div class="joker-art">{{ joker.art }}</div>
+        <div class="joker-art">
+          <template v-if="isImagePath(joker.art)">
+            <img :src="joker.art" :alt="joker.name" class="joker-art-img" />
+          </template>
+          <template v-else>
+            <span class="joker-art-emoji">{{ joker.art }}</span>
+          </template>
+        </div>
         <div class="joker-name">{{ joker.name }}</div>
         <div class="joker-desc">{{ joker.description }}</div>
         <div class="joker-rarity" :style="{ color: rarityColor(joker.rarity) }">{{ joker.rarity }}</div>
@@ -44,6 +51,11 @@ defineEmits(['buy', 'skip'])
 
 function rarityColor(rarity) {
   return RARITY_COLOR[rarity] ?? '#fff'
+}
+
+function isImagePath(art) {
+  if (typeof art !== 'string') return true  // import 进来的 module URL
+  return art.startsWith('/') || art.startsWith('data:') || /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(art)
 }
 </script>
 
@@ -94,7 +106,24 @@ function rarityColor(rarity) {
 .shop-joker-card.bought {
   opacity: 0.5;
 }
-.joker-art  { font-size: 40px; }
+.joker-art {
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.joker-art-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+.joker-art-emoji {
+  font-size: 40px;
+  line-height: 1;
+}
 .joker-name { font-size: 12px; font-weight: 700; color: #1a0f24; text-align: center; }
 .joker-desc { font-size: 10px; color: #4a3f2a; text-align: center; line-height: 1.4; }
 .joker-rarity { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }

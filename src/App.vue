@@ -43,6 +43,11 @@
       />
     </div>
 
+    <!-- 关卡切换 toast -->
+    <Transition name="blind-toast">
+      <div v-if="blindToastText" class="blind-toast">{{ blindToastText }}</div>
+    </Transition>
+
     <!-- 设置按钮 -->
     <SettingsButton @open="showSettings = true" />
 
@@ -68,15 +73,17 @@
     <!-- 结局覆盖层 -->
     <EndView
       v-if="gameState === 'won' || gameState === 'lost'"
-      :type="gameState"
-      :handsLeft="handsLeft"
+      :state="gameState"
+      :blindIndex="blindIndex"
+      :coins="coins"
+      :ownedJokers="ownedJokers"
       @restart="restartGame"
     />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import SideBar        from './components/SideBar.vue'
 import HandArea       from './components/HandArea.vue'
 import PlayArea       from './components/PlayArea.vue'
@@ -92,7 +99,7 @@ import { JOKERS } from './config/jokers.js'
 import { calculateScore } from './utils/scoring.js'
 import { loadSettings, saveSettings, applyAnimScale } from './utils/settings.js'
 
-// ── 状态字段（照抄 PRD §10.12）──────────────────────────────
+// ── 状态字段 ──────────────────────────────────────────────────
 const gameState    = ref('playing')
 const blindIndex   = ref(0)
 const round        = ref(1)
@@ -122,9 +129,22 @@ const isAnimating        = ref(false)
 const showFormulaOverlay = ref(false)
 const sortMode           = ref('rank')
 
+// 关卡 toast
+const blindToastText = ref('')
+let blindToastTimer = null
+
 const currentBlind = computed(() => BLINDS[blindIndex.value])
 
-// ── 工具函数 ────────────────────────────────────────────────
+// ── toast 函数 ────────────────────────────────────────────────
+function showBlindToast() {
+  const blind = BLINDS[blindIndex.value]
+  if (!blind) return
+  blindToastText.value = `底注 ${blind.ante} · 第 ${blindIndex.value + 1}/${TOTAL_BLINDS} 关 · ${blind.name} · 目标 ${blind.target}`
+  if (blindToastTimer) clearTimeout(blindToastTimer)
+  blindToastTimer = setTimeout(() => { blindToastText.value = '' }, 2000)
+}
+
+// ── 工具函数 ─────────────────────────────────────────────────
 function getAnimScale() {
   return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--anim-scale') || '1')
 }
@@ -140,7 +160,7 @@ function shuffle(arr) {
   return a
 }
 
-// ── 牌组生成 ────────────────────────────────────────────────
+// ── 牌组生成 ─────────────────────────────────────────────────
 function createDeck() {
   const suits = ['♠', '♥', '♦', '♣']
   const ranks = ['A','2','3','4','5','6','7','8','9','10','J','Q','K']
@@ -154,7 +174,7 @@ function createDeck() {
   return d
 }
 
-// ── 发牌 ─────────────────────────────────────────────────────
+// ── 发牌 ────────────────────────────────────────────────────
 async function dealCards(count) {
   for (let i = 0; i < count; i++) {
     if (deck.value.length === 0) {
@@ -168,7 +188,7 @@ async function dealCards(count) {
   }
 }
 
-// ── 初始化一局/一关 ──────────────────────────────────────────
+// ── 初始化一局/一关 ─────────────────────────────────────────
 async function initRound() {
   deck.value        = shuffle(createDeck())
   hand.value        = []
@@ -184,9 +204,10 @@ async function initRound() {
   showFormulaOverlay.value = false
   gameState.value    = 'playing'
   await dealCards(HAND_SIZE)
+  showBlindToast()
 }
 
-// ── 重开 ─────────────────────────────────────────────────────
+// ── 重开 ────────────────────────────────────────────────────
 function restartGame() {
   blindIndex.value  = 0
   round.value       = 1
@@ -196,7 +217,7 @@ function restartGame() {
   initRound()
 }
 
-// ── 选牌 ─────────────────────────────────────────────────────
+// ── 选牌 ────────────────────────────────────────────────────
 function toggleSelect(cardId) {
   if (isAnimating.value) return
   const s = new Set(selectedIds.value)
@@ -208,7 +229,7 @@ function toggleSelect(cardId) {
   selectedIds.value = s
 }
 
-// ── 排序 ─────────────────────────────────────────────────────
+// ── 排序 ────────────────────────────────────────────────────
 const RANK_ORDER = ['2','3','4','5','6','7','8','9','10','J','Q','K','A']
 const SUIT_ORDER = ['♠','♥','♦','♣']
 
@@ -224,14 +245,13 @@ function handleSort(mode) {
   }
 }
 
-// ── 出牌 ─────────────────────────────────────────────────────
+// ── 出牌 ────────────────────────────────────────────────────
 async function handlePlay() {
   if (isAnimating.value || selectedIds.value.size === 0) return
   isAnimating.value = true
 
   const selected = hand.value.filter(c => selectedIds.value.has(c.id))
 
-  // 选中牌飞向出牌区（简化：移入 playedCards，350ms 动效）
   hand.value = hand.value.filter(c => !selectedIds.value.has(c.id))
   selectedIds.value = new Set()
   playedCards.value = selected
@@ -265,7 +285,7 @@ async function handlePlay() {
   checkGameState()
 }
 
-// ── 弃牌 ─────────────────────────────────────────────────────
+// ── 弃牌 ────────────────────────────────────────────────────
 async function handleDiscard() {
   if (isAnimating.value || selectedIds.value.size === 0 || discardsLeft.value <= 0) return
   isAnimating.value = true
@@ -282,15 +302,15 @@ async function handleDiscard() {
   isAnimating.value = false
 }
 
-// ── 通关/失败判断 ────────────────────────────────────────────
+// ── 通关/失败判断 ───────────────────────────────────────────
 function checkGameState() {
   if (blindScore.value >= currentBlind.value.target) {
-    // 通关
-    const reward = calcReward(handsLeft.value)
+    // 通关：传 ante 参数到 calcReward
+    const reward = calcReward(handsLeft.value, currentBlind.value.ante)
     coins.value += reward
 
     if (blindIndex.value >= TOTAL_BLINDS - 1) {
-      // 第 3 关通关 → won，不进商店
+      // 第 10 关通关 → won，不进商店
       gameState.value = 'won'
     } else {
       // 进商店
@@ -303,7 +323,7 @@ function checkGameState() {
   }
 }
 
-// ── 商店准备 ─────────────────────────────────────────────────
+// ── 商店准备 ────────────────────────────────────────────────
 function prepareShop() {
   const available = JOKERS.filter(j => !ownedJokers.value.find(o => o.id === j.id))
   const pool = shuffle(available).slice(0, SHOP_JOKER_COUNT)
@@ -315,7 +335,6 @@ function buyJoker(joker) {
   if (ownedJokers.value.length >= MAX_JOKERS) return
   coins.value -= joker.price
   ownedJokers.value = [...ownedJokers.value, { ...joker }]
-  // 标记已购买
   shopJokers.value = shopJokers.value.map(j => j.id === joker.id ? { ...j, bought: true } : j)
 }
 
@@ -325,13 +344,13 @@ function skipShop() {
   initRound()
 }
 
-// ── 设置 ─────────────────────────────────────────────────────
+// ── 设置 ────────────────────────────────────────────────────
 function updateSettings(newSettings) {
   settings.value = newSettings
   applyAnimScale(newSettings.animSpeed)
 }
 
-// ── 初始化 ───────────────────────────────────────────────────
+// ── 初始化 ──────────────────────────────────────────────────
 onMounted(() => {
   applyAnimScale(settings.value.animSpeed)
   initRound()
@@ -351,5 +370,38 @@ onMounted(() => {
   display: grid;
   grid-template-rows: 250px 1fr 300px;
   overflow: hidden;
+}
+
+/* 关卡切换 toast */
+.blind-toast {
+  position: fixed;
+  top: 30%;
+  /* sidebar 占 min(28vw, 480px)，右主区中心 ≈ 50% + sidebar/2 */
+  left: calc(50% + min(14vw, 240px));
+  transform: translate(-50%, -50%);
+  background: linear-gradient(135deg, rgba(255,209,102,.95), rgba(245,158,11,.95));
+  color: #1a1a1a;
+  font: 900 28px/1.2 'Inter', 'PingFang SC', sans-serif;
+  padding: 22px 48px;
+  border-radius: 16px;
+  border: 3px solid #ffd166;
+  box-shadow: 0 16px 40px rgba(0,0,0,.55), 0 0 40px rgba(255,209,102,.7);
+  z-index: 150;
+  pointer-events: none;
+  white-space: nowrap;
+  letter-spacing: 2px;
+  text-shadow: 0 2px 0 rgba(255,255,255,.4);
+}
+.blind-toast-enter-active { animation: blindToastIn .4s cubic-bezier(.34,1.56,.64,1); }
+.blind-toast-leave-active { animation: blindToastOut .3s ease; }
+
+@keyframes blindToastIn {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.4) rotate(-3deg); }
+  60%  { opacity: 1; transform: translate(-50%, -50%) scale(1.08) rotate(1deg); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(0); }
+}
+@keyframes blindToastOut {
+  0%   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.15); }
 }
 </style>
