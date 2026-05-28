@@ -5,6 +5,7 @@ export const DEFAULT_SETTINGS = {
   sfxVolume: 70,
   animSpeed: 'normal',
   showFormula: true,
+  aiAutoMode: false,   // v8.3 新增
 }
 
 export const ANIM_SCALE = {
@@ -16,14 +17,19 @@ export const ANIM_SCALE = {
 export function loadSettings() {
   try {
     const raw = localStorage.getItem(LS_KEY)
-    if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) }
+    if (raw) {
+      // aiAutoMode 不从 localStorage 恢复(每次刷新都是关)
+      return { ...DEFAULT_SETTINGS, ...JSON.parse(raw), aiAutoMode: false }
+    }
   } catch {}
   return { ...DEFAULT_SETTINGS }
 }
 
 export function saveSettings(settings) {
   try {
-    localStorage.setItem(LS_KEY, JSON.stringify(settings))
+    // 保存时排除 aiAutoMode,避免上次开启的托管影响下次启动
+    const { aiAutoMode: _, ...persistent } = settings
+    localStorage.setItem(LS_KEY, JSON.stringify(persistent))
   } catch {}
 }
 

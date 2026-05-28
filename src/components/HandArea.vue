@@ -1,14 +1,14 @@
 <template>
-  <!-- v9 硬约束：手牌在上，按钮在下 -->
+  <!-- v9 硬约束:手牌在上,按钮在下 -->
   <div class="hand-area">
-    <!-- 手牌区（在上） -->
-    <div class="cards-row">
+    <!-- 手牌区(在上)+ 双阶段理牌 keyframes -->
+    <div class="cards-row" :class="{ 'is-collapsing': isCollapsing, 'is-spreading': isSpreading }">
       <div
         v-for="card in hand"
         :key="card.id"
         class="playing-card"
         :class="{ selected: selectedIds.has(card.id), dealing: card.dealing }"
-        :ref="el => { if (el) cardRefs[card.id] = el }"
+        :ref="el => setCardRef(card.id, el)"
         @click="$emit('toggle-select', card.id)"
       >
         <span class="card-rank" :class="card.suit === '♥' || card.suit === '♦' ? 'red' : 'black'">{{ card.rank }}</span>
@@ -17,82 +17,87 @@
       </div>
     </div>
 
-    <!-- 操作按钮行（在下） - v9 增量：三栏 grid 布局 -->
+    <!-- 操作按钮行(在下)- v9 三栏 grid 布局 -->
     <div class="btn-row">
-      <!-- 左：排序图标按钮 - v9 增量：紧凑两个 56×56 图标版 -->
+      <!-- 左:排序图标按钮 -->
       <div class="btn-left">
-        <button
-          class="sort-icon-btn"
-          :class="{ active: sortMode === 'rank' }"
-          @click="$emit('sort', 'rank')"
-          title="按点数排序"
-        >
+        <button class="sort-icon-btn" @click="$emit('sort-rank')" :disabled="isPlaying" title="按点数排序">
           <span class="sort-icon">⇅</span>
           <span class="sort-label">点</span>
         </button>
-        <button
-          class="sort-icon-btn"
-          :class="{ active: sortMode === 'suit' }"
-          @click="$emit('sort', 'suit')"
-          title="按花色排序"
-        >
+        <button class="sort-icon-btn" @click="$emit('sort-suit')" :disabled="isPlaying" title="按花色排序">
           <span class="sort-icon">♥</span>
           <span class="sort-label">花</span>
         </button>
       </div>
 
-      <!-- 中央：出牌 + 弃牌 -->
+      <!-- 中央:出牌 + 弃牌 -->
       <div class="btn-center">
         <button
           class="px-btn px-btn-play big-play"
-          :disabled="selectedIds.size === 0 || isAnimating"
+          :disabled="isPlaying || selectedIds.size === 0 || handsLeft <= 0"
           @click="$emit('play')"
-        >
-          出牌 ({{ selectedIds.size }})
-        </button>
+        >出牌 ({{ selectedIds.size }})</button>
         <button
           class="px-btn px-btn-discard mid-discard"
-          :disabled="selectedIds.size === 0 || discardsLeft <= 0 || isAnimating"
+          :disabled="isPlaying || selectedIds.size === 0 || discardsLeft <= 0"
           @click="$emit('discard')"
-        >
-          弃牌 ({{ discardsLeft }})
-        </button>
+        >弃牌 ({{ discardsLeft }})</button>
       </div>
 
-      <!-- 右：AI 按钮占位（第 3 轮才接 AIButton） -->
+      <!-- 右:AI 按钮 + 全自动 toggle -->
       <div class="btn-right">
-        <!-- AI 按钮第 3 轮实现 -->
+        <AIButton
+          ref="aiBtnRef"
+          :disabled="isPlaying || handsLeft <= 0"
+          @ai-play="$emit('ai-play')"
+        />
+        <label class="ai-auto-toggle" :class="{ on: aiAutoMode }" title="AI 全自动托管">
+          <input type="checkbox" :checked="aiAutoMode" @change="$emit('update-ai-auto', $event.target.checked)" />
+          <span class="toggle-track-small"><span class="toggle-knob-small"></span></span>
+          <span class="ai-auto-label">托管</span>
+        </label>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
+import { ref } from 'vue'
+import AIButton from './AIButton.vue'
+
 defineProps({
   hand:         { type: Array,  required: true },
-  selectedIds:  { type: Object, required: true }, // Set
+  selectedIds:  { type: Object, required: true },
+  handsLeft:    { type: Number, required: true },
   discardsLeft: { type: Number, required: true },
-  isAnimating:  { type: Boolean, default: false },
-  sortMode:     { type: String, default: 'rank' },
+  isPlaying:    { type: Boolean, default: false },
+  isCollapsing: { type: Boolean, default: false },
+  isSpreading:  { type: Boolean, default: false },
+  aiAutoMode:   { type: Boolean, default: false },
 })
-const cardRefs = {}
-defineEmits(['toggle-select', 'play', 'discard', 'sort'])
+
+defineEmits(['toggle-select', 'play', 'discard', 'sort-rank', 'sort-suit', 'ai-play', 'update-ai-auto'])
+
+const aiBtnRef = ref(null)
+const cardRefs = ref({})
+function setCardRef(id, el) {
+  if (el) cardRefs.value[id] = el
+  else delete cardRefs.value[id]
+}
+defineExpose({ aiBtnRef, cardRefs })
 </script>
 
 <style scoped>
-/* hand-area flex column：手牌在上，按钮在下，整体贴底 */
 .hand-area {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  padding-bottom: 20px;
+  padding: 10px 12px 20px;
   gap: 12px;
   height: 300px;
-  padding-left: 12px;
-  padding-right: 12px;
 }
 
-/* 手牌行 */
 .cards-row {
   display: flex;
   align-items: flex-end;
@@ -100,25 +105,64 @@ defineEmits(['toggle-select', 'play', 'discard', 'sort'])
   gap: 8px;
   flex-wrap: nowrap;
   padding: 0 4px;
+  min-height: 170px;
 }
 
-/* 按钮行：v9 增量 - 三栏 grid 布局 */
+/* 双阶段理牌 keyframes */
+.cards-row.is-collapsing .playing-card {
+  transition: none !important;
+  animation: cardCollapse calc(0.15s * var(--anim-scale, 1)) ease-in forwards;
+}
+@keyframes cardCollapse {
+  0%   { transform: scale(1) translateY(0) rotate(0); opacity: 1; }
+  100% { transform: scale(0.35) translateY(-25px) rotate(-3deg); opacity: 0.7; }
+}
+.cards-row.is-spreading .playing-card {
+  transition: none !important;
+  animation: cardSpread calc(0.32s * var(--anim-scale, 1)) cubic-bezier(.25, .8, .35, 1) backwards;
+}
+.cards-row.is-spreading .playing-card:nth-child(1) { animation-delay: 0ms; }
+.cards-row.is-spreading .playing-card:nth-child(2) { animation-delay: 35ms; }
+.cards-row.is-spreading .playing-card:nth-child(3) { animation-delay: 70ms; }
+.cards-row.is-spreading .playing-card:nth-child(4) { animation-delay: 105ms; }
+.cards-row.is-spreading .playing-card:nth-child(5) { animation-delay: 140ms; }
+.cards-row.is-spreading .playing-card:nth-child(6) { animation-delay: 175ms; }
+.cards-row.is-spreading .playing-card:nth-child(7) { animation-delay: 210ms; }
+.cards-row.is-spreading .playing-card:nth-child(8) { animation-delay: 245ms; }
+@keyframes cardSpread {
+  0%   { transform: scale(0.35) translateY(-25px) rotate(-3deg); opacity: 0.7; }
+  70%  { transform: scale(1.03) translateY(-3px) rotate(0.6deg); opacity: 1; }
+  100% { transform: scale(1) translateY(0) rotate(0); opacity: 1; }
+}
+
+/* v9 三栏 grid 布局 */
 .btn-row {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 12px;
 }
-
-/* 左：排序图标按钮区 */
 .btn-left {
   display: flex;
   align-items: center;
   justify-content: flex-start;
   gap: 6px;
 }
+.btn-center {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.btn-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
 
-/* v9 增量：排序图标按钮 56×56 紧凑两栏 */
+/* 排序图标按钮 56×56 */
 .sort-icon-btn {
   width: 56px;
   height: 56px;
@@ -136,69 +180,58 @@ defineEmits(['toggle-select', 'play', 'discard', 'sort'])
   transition: all 0.15s ease;
   flex-shrink: 0;
 }
-.sort-icon-btn:hover {
-  transform: translateY(-2px);
-  filter: brightness(1.15);
-}
-.sort-icon-btn:active {
-  transform: translateY(1px);
-}
-.sort-icon-btn.active {
-  background: linear-gradient(180deg, rgba(99,102,241,.55) 0%, rgba(67,56,202,.45) 100%);
-  border-color: rgba(129,140,248,.9);
-  box-shadow: 0 3px 0 rgba(67,56,202,.6), 0 0 8px rgba(129,140,248,.4);
-}
-.sort-icon {
-  font-size: 18px;
-  line-height: 1;
-}
-.sort-label {
-  font-size: 11px;
-  font-family: 'Inter', 'PingFang SC', sans-serif;
-  font-weight: 700;
-  color: #c7d2fe;
-}
+.sort-icon-btn:hover:not([disabled]) { transform: translateY(-2px); filter: brightness(1.15); }
+.sort-icon-btn:active:not([disabled]) { transform: translateY(1px); }
+.sort-icon-btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+.sort-icon { font-size: 18px; line-height: 1; }
+.sort-label { font-size: 11px; font-family: Inter, 'PingFang SC', sans-serif; font-weight: 700; color: #c7d2fe; }
 
-/* 中央：出牌+弃牌 flex row */
-.btn-center {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-}
+.big-play { width: 240px; height: 60px; font-size: 20px; min-height: 60px; padding: 0; }
+.mid-discard { width: 160px; height: 60px; font-size: 16px; min-height: 60px; padding: 0; }
 
-/* 出牌按钮 240×60 字号 20px */
-.big-play {
-  width: 240px;
-  height: 60px;
-  font-size: 20px;
-  min-height: 60px;
-  padding: 0;
-}
-
-/* 弃牌按钮 160×60 字号 16px */
-.mid-discard {
-  width: 160px;
-  height: 60px;
-  font-size: 16px;
-  min-height: 60px;
-  padding: 0;
-}
-
-/* 右：AI 按钮占位 */
-.btn-right {
+/* AI 全自动 toggle */
+.ai-auto-toggle {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  gap: 5px;
+  cursor: pointer;
+  user-select: none;
 }
+.ai-auto-toggle input { display: none; }
+.toggle-track-small {
+  width: 36px;
+  height: 20px;
+  background: rgba(255,255,255,.15);
+  border-radius: 10px;
+  position: relative;
+  transition: background 0.2s;
+}
+.ai-auto-toggle.on .toggle-track-small {
+  background: #a855f7;
+  box-shadow: 0 0 8px rgba(168,85,247,.6);
+}
+.toggle-knob-small {
+  width: 14px;
+  height: 14px;
+  background: #fff;
+  border-radius: 50%;
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  transition: transform 0.2s;
+}
+.ai-auto-toggle.on .toggle-knob-small {
+  transform: translateX(16px);
+}
+.ai-auto-label { font-size: 12px; color: var(--muted); }
+.ai-auto-toggle.on .ai-auto-label { color: #a855f7; }
 
 /* 扑克牌内容 */
 .card-rank {
   position: absolute;
   top: 6px;
   left: 8px;
-  font-family: 'Inter', sans-serif;
+  font-family: Inter, sans-serif;
   font-size: 16px;
   font-weight: 800;
   line-height: 1;
@@ -215,12 +248,12 @@ defineEmits(['toggle-select', 'play', 'discard', 'sort'])
   position: absolute;
   bottom: 6px;
   right: 8px;
-  font-family: 'Inter', sans-serif;
+  font-family: Inter, sans-serif;
   font-size: 16px;
   font-weight: 800;
   line-height: 1;
   transform: rotate(180deg);
 }
-.red  { color: #dc2626; }
+.red { color: #dc2626; }
 .black { color: #1a0f24; }
 </style>

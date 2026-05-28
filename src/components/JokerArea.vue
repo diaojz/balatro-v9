@@ -3,7 +3,7 @@
     <div class="joker-label">Joker 槽</div>
     <div class="joker-slots">
       <template v-for="i in MAX_JOKERS" :key="i">
-        <div v-if="ownedJokers[i - 1]" class="joker-card">
+        <div v-if="ownedJokers[i - 1]" class="joker-card" :ref="el => setJokerRef(ownedJokers[i - 1].id, el)">
           <div class="joker-art">
             <template v-if="isImagePath(ownedJokers[i - 1].art)">
               <img :src="ownedJokers[i - 1].art" :alt="ownedJokers[i - 1].name" class="joker-art-img" />
@@ -28,12 +28,21 @@
 </template>
 
 <script setup>
+import { ref } from 'vue'
 import { RARITY_COLOR } from '../config/jokers.js'
 import { MAX_JOKERS }   from '../config/constants.js'
 
 defineProps({
   ownedJokers: { type: Array, default: () => [] },
 })
+
+// v9 关键修复:jokerRefs 必须是 ref({}) 然后用 .value[id] 赋值(不是直接 obj[id])
+const jokerRefs = ref({})
+function setJokerRef(id, el) {
+  if (el) jokerRefs.value[id] = el
+  else delete jokerRefs.value[id]
+}
+defineExpose({ jokerRefs })
 
 function rarityColor(rarity) {
   return RARITY_COLOR[rarity] ?? '#fff'
