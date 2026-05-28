@@ -3,7 +3,7 @@
     <!-- 游戏中 / 商店 / 结算 -->
     <template v-if="gameState === 'playing'">
       <SideBar
-        :blind="currentBlind"
+        :currentBlind="currentBlind"
         :blindIndex="blindIndex"
         :blindScore="blindScore"
         :handsLeft="handsLeft"
