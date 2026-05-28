@@ -5,3 +5,5 @@
 01:30:04  START · phase=R2-agent · v9 第 2 轮视觉升级
 04:20:51  END   · phase=R2-agent · stalled 但代码完成,手动 build+commit(总耗时 ≈ 13min)
 04:20:51  START · phase=R3-agent · v9 第 3 轮体感升级
+09:34:55  END   · phase=R3-agent · stalled,主线程手动接管完成
+09:34:55  START · phase=v9-deploy · 发布到 GitHub Pages
